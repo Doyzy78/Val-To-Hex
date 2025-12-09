@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hex Converter</title>
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500&display=swap');
+
+    body {
+        margin: 0;
+        font-family: 'Orbitron', sans-serif;
+        background: radial-gradient(circle at top, #0f0f15, #1a1a2e);
+        color: #fff;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+    }
+
+    .container {
+        background: #1b1d34;
+        padding: 40px;
+        border-radius: 15px;
+        text-align: center;
+        width: 350px;
+    }
+
+    img.logo {
+        width: 100px;
+        height: 100px;
+        border-radius: 50%;
+        border: 3px solid #ff00ff;
+        margin-bottom: 20px;
+    }
+
+    h1 {
+        font-size: 24px;
+        margin-bottom: 20px;
+        color: #ff00ff;
+    }
+
+    select, input {
+        width: 100%;
+        padding: 12px;
+        margin: 10px 0;
+        border-radius: 8px;
+        border: none;
+        font-size: 16px;
+        background: #0f0f15;
+        color: #fff;
+    }
+
+    button {
+        background-color: #ff00ff;
+        color: #fff;
+        font-size: 16px;
+        font-weight: bold;
+        padding: 12px 25px;
+        margin-top: 15px;
+        border: none;
+        border-radius: 10px;
+        cursor: pointer;
+    }
+
+    button:hover {
+        background-color: #e600e6;
+    }
+
+    pre {
+        text-align: left;
+        background: #0f0f15;
+        padding: 15px;
+        border-radius: 10px;
+        overflow-x: auto;
+        margin-top: 20px;
+        color: #fff;
+    }
+</style>
+</head>
+<body>
+<div class="container">
+    <img src="src/logo/logo.png" alt="Logo" class="logo">
+    <h1>DOY-HEX CONVERTER</h1>
+
+    <select id="arch">
+        <option value="" disabled selected>Select Architecture</option>
+        <option value="1">ARM32</option>
+        <option value="2">ARM64</option>
+    </select>
+
+    <select id="type">
+        <option value="" disabled selected>Select Value Type</option>
+        <option value="1">Bool</option>
+        <option value="2">Int</option>
+        <option value="3">Float</option>
+    </select>
+
+    <input type="number" id="value" placeholder="Enter Value">
+
+    <button onclick="generateHex()">Generate Hex</button>
+
+    <pre id="output"></pre>
+</div>
+
+<script>
+function toHexBytes(num, bytes) {
+    let t = [];
+    for (let i = 0; i < bytes; i++) {
+        t.push(('0' + (num & 0xFF).toString(16).toUpperCase()).slice(-2));
+        num = num >>> 8;
+    }
+    return t.join(' ');
+}
+
+function floatToBits(f) {
+    let buffer = new ArrayBuffer(4);
+    new DataView(buffer).setFloat32(0, f, true);
+    return new DataView(buffer).getUint32(0, true);
+}
+
+function arm32Bool(v) {
+    v = v !== 0 ? 1 : 0;
+    let opcode = 0xE3A00000 | (v & 0xFF);
+    let bxlr = 0xE12FFF1E;
+    return toHexBytes(opcode, 4) + " " + toHexBytes(bxlr, 4);
+}
+
+function arm32Int(v) {
+    v = v >>> 0;
+    let lower = v & 0xFFFF;
+    let upper = (v >>> 16) & 0xFFFF;
+    let movw = 0xE3000000 | ((lower & 0xF000) << 4) | (lower & 0xFFF);
+    let movt = 0xE3400000 | ((upper & 0xF000) << 4) | (upper & 0xFFF);
+    let bxlr = 0xE12FFF1E;
+    return toHexBytes(movw, 4) + " " + toHexBytes(movt, 4) + " " + toHexBytes(bxlr, 4);
+}
+
+function arm32Float(f) {
+    return arm32Int(floatToBits(f));
+}
+
+function arm64Bool(v) {
+    v = v !== 0 ? 1 : 0;
+    let movz = 0xD2800000 | ((v & 0xFFFF) << 5);
+    let ret = 0xD65F03C0;
+    return toHexBytes(movz, 4) + " " + toHexBytes(ret, 4);
+}
+
+function arm64Int(v) {
+    v = v >>> 0;
+    let lower = v & 0xFFFF;
+    let upper = (v >>> 16) & 0xFFFF;
+    let movz = 0xD2800000 | (lower << 5);
+    let movk = 0xF2800000 | (upper << 5);
+    let ret = 0xD65F03C0;
+    return toHexBytes(movz, 4) + " " + toHexBytes(movk, 4) + " " + toHexBytes(ret, 4);
+}
+
+function arm64Float(f) {
+    return arm64Int(floatToBits(f));
+}
+
+function generateHex() {
+    const archChoice = document.getElementById('arch').value;
+    const typeChoice = document.getElementById('type').value;
+    const value = Number(document.getElementById('value').value);
+    let result = "";
+
+    if (!archChoice || !typeChoice || isNaN(value)) {
+        alert("Please select architecture, type, and enter a value.");
+        return;
+    }
+
+    if (archChoice == "1") {
+        if (typeChoice == "1") result = arm32Bool(value);
+        else if (typeChoice == "2") result = arm32Int(value);
+        else result = arm32Float(value);
+    } else if (archChoice == "2") {
+        if (typeChoice == "1") result = arm64Bool(value);
+        else if (typeChoice == "2") result = arm64Int(value);
+        else result = arm64Float(value);
+    }
+
+    document.getElementById('output').textContent = "🔹 Hex Output:\n" + result;
+
+    navigator.clipboard.writeText(result).then(() => {
+        console.log("Copied to clipboard!");
+    });
+}
+</script>
+</body>
+</html>
